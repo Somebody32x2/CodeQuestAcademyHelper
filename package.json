@@ -1,0 +1,19 @@
+{
+  "name": "cqhelper",
+  "version": "0.1.0",
+  "description": "A node script to make the problem solving process on Code Quest Academy much faster",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "run": "node main.js"
+  },
+  "author": "Somebody32x2",
+  "license": "ISC",
+  "dependencies": {
+    "download": "^8.0.0",
+    "jest-diff": "^29.5.0",
+    "line-ending-corrector": "^1.0.1",
+    "open": "^8.4.2",
+    "unzipper": "^0.10.11"
+  }
+}
