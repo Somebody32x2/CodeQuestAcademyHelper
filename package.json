@@ -10,10 +10,12 @@
   "author": "Somebody32x2",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^16.4.2",
     "download": "^8.0.0",
     "jest-diff": "^29.5.0",
     "line-ending-corrector": "^1.0.1",
     "open": "^8.4.2",
     "unzipper": "^0.10.11"
-  }
+  },
+  "type": "module"
 }

@@ -1,85 +1,74 @@
-const fs = require('fs');
-const {diffStringsUnified} = require("jest-diff");
-const {LineEndingCorrector} = require("line-ending-corrector");
-const unzipper = require("unzipper");
+import fs from "fs";
+import {diffStringsUnified} from "jest-diff";
+import LineEndingCorrector from "line-ending-corrector";
+import unzipper from "unzipper";
+import * as readline from 'node:readline/promises';
+import {stdin as input, stdout as output} from 'node:process';
+import login from "./login.js";
+import getProblems from "./get-problems.js";
+import download from "download";
+import * as path from "path";
+import open from "open";
 
 // const path = require('path');
-function downloadNextProblem() {
-    fetch("https://lmcodequestacademy.com/api/quest/get-problems", {
-        "headers": {
-            "accept": "application/json, text/plain, */*",
-            "accept-language": "en-US,en;q=0.9",
-            "content-type": "application/json",
-            "sec-ch-ua": "\"Google Chrome\";v=\"111\", \"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"111\"",
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": "\"Windows\"",
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-origin",
-            "cookie": "",
-            "Referer": "https://lmcodequestacademy.com/quest?status=not-started",
-            "Referrer-Policy": "strict-origin-when-cross-origin"
-        },
-        "body": "{\"limit\":10,\"offset\":0,\"status\":\"not-started\",\"filter\":\"\",\"difficulty\":0,\"userID\":\"\"}",
-        "method": "POST"
-    }).then(response => response.json()).then(data => {
-            console.log(data)
-            let skippedProblems = fs.readFileSync("skippedProblems.txt", "utf8").split("\n");
-            let thisProblem = data.problems[0];
-            while (skippedProblems.includes(thisProblem.slug)) {
-                thisProblem = data.problems.shift();
-            }
-            // Select the first non-skipped problem
-            console.dir(thisProblem);
+function downloadProblem(problem) {
 
-            // Make a new folder for the problem
-            try {
-                fs.mkdirSync("../" + thisProblem.slug);
-            } catch (e) {
-                if (e.errno === -4075) console.log("Directory already exists");
-                else console.log(e);
-            }
-
-            // Set the current problem in activeProblem.txt
-            fs.writeFileSync("activeProblem.txt", thisProblem.slug);
-
-            // Create a solve.py file in the problem folder
-            fs.writeFileSync(`../${thisProblem.slug}/solve.py`, `# Path: ${thisProblem.slug}/solve.py\n` + fs.readFileSync("template.txt"))
-
-            // Open the problem description in the browser
-            const open = require("open");
-            open(`https://lmcodequestacademy.com/api/static/problems/${thisProblem.slug}`);
-
-            // Download and unzip the test cases
-            const download = require('download');
-            download(`https://lmcodequestacademy.com/api/static/samples/${thisProblem.slug}`, "../" + thisProblem.slug).then(() => {
-                console.log('downloaded tests!');
-
-                // Unzip the test cases to the folder for the problem and delete the zip file
-                const unzipper = require('unzipper');
-                fs.createReadStream(`../${thisProblem.slug}/${thisProblem.slug}-samples.zip`)
-                    .pipe(unzipper.Extract({path: `../${thisProblem.slug}`}));
-                setTimeout(() => {
-                    fs.unlinkSync(`../${thisProblem.slug}/${thisProblem.slug}-samples.zip`)
-                }, 1000);
-            });
-
-
+    if (fs.existsSync(`../${problem.slug}`)) {
+        console.log("Problem already downloaded!");
+        return;
+    }
+    // Make a new folder for the problem
+    try {
+        fs.mkdirSync("../" + problem.slug);
+    } catch (e) {
+        if (e.errno === -4075) {
+            console.log("Directory already exists");
+            return;
         }
-    );
+        else console.log(e);
+    }
+
+
+    // Create a solve.py file in the problem folder
+    fs.writeFileSync(`../${problem.slug}/solve.py`, `# Path: ${problem.slug}/solve.py\n` + fs.readFileSync("template.txt"))
+
+
+    // Download and unzip the test cases
+    download(`https://lmcodequestacademy.com/api/static/samples/${problem.slug}`, "../" + problem.slug).then(() => {
+        console.log('downloaded tests!');
+
+        // Unzip the test cases to the folder for the problem and delete the zip file
+        fs.createReadStream(`../${problem.slug}/${problem.slug}-samples.zip`)
+            .pipe(unzipper.Extract({path: `../${problem.slug}`}));
+        setTimeout(() => {
+            fs.unlinkSync(`../${problem.slug}/${problem.slug}-samples.zip`)
+        }, 1000);
+    });
+    // Download the problem statement
+    download(`https://lmcodequestacademy.com/api/static/problems/${problem.slug}`, "../" + problem.slug).then(() => {
+        console.log('Downloaded problem statement!');
+        // open the problem statement in the default browser
+        // Get the path to the problem statement
+
+        const problemStatementPath = path.join(__dirname, `../${problem.slug}/${problem.slug}.pdf`);
+        // Open the problem statement in the default PDF viewer
+        open(problemStatementPath);
+    });
+    // Download the resource packet (if it exists)
+    download(`https://lmcodequestacademy.com/resource-packets/resources/${problem.slug}.pdf`, "../" + problem.slug).then(() => {
+        console.log('Downloaded resource packet!');
+    });
 }
 
-function testCurrentProblem() {
+function testProblem(problem) {
     // Get the current problem from activeProblem.txt
-    let currentProblem = fs.readFileSync("activeProblem.txt", "utf8");
-    console.log("Testing " + currentProblem);
+    console.log("Testing " + problem.slug);
     // Run the test cases for the current problem (in ../activeProblem)
     // by comparing (1.out == 1.in | solve.py, for each pair of files)
     // and outputting the results to the console
 
     // Get the list of files in the current problem folder
-    const path = require('path');
-    const directoryPath = path.join(__dirname, `../${currentProblem}`);
+    const directoryPath = path.join(__dirname, `../${problem.slug}`);
 
     fs.readdir(directoryPath, function (err, files) {
         //handling error
@@ -90,7 +79,7 @@ function testCurrentProblem() {
         files.forEach(function (file) {
             if (file.includes(".in")) {
                 // Run the test case
-                const {execSync} = require('child_process');
+                import {execSync} from 'child_process';
                 // Spawn the process and pipe the input file to the process
                 const testOut = execSync('py solve.py', {
                     cwd: `../${currentProblem}`,
@@ -115,19 +104,46 @@ function testCurrentProblem() {
     });
 }
 
-function skipCurrent() {
-    // Add the current problem to the list of skipped problems in skippedProblems.txt
-    let currentProblem = fs.readFileSync("activeProblem.txt", "utf8");
-    fs.appendFileSync("skippedProblems.txt", currentProblem + "\n");
-    // Download the next problem
-    downloadNextProblem();
-}
+// function skipCurrent() {
+//     // Add the current problem to the list of skipped problems in skippedProblems.txt
+//     let currentProblem = fs.readFileSync("activeProblem.txt", "utf8");
+//     fs.appendFileSync("skippedProblems.txt", currentProblem + "\n");
+//     // Download the next problem
+//     downloadNextProblem();
+// }
 
-// If this was run with --test, test the current problem, if --next, get the next problem
-if (process.argv[2] === "--test") {
-    testCurrentProblem();
-} else if (process.argv[2] === "--next") {
-    downloadNextProblem();
-} else if (process.argv[2] === "--skip") {
-    skipCurrent();
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
+let session = await login();
+let questions = await getProblems(session);
+console.log("Questions: ");
+for (let i = 0; i < questions.length; i++) {
+    console.log(`${i + 1}. ${questions[i].title} (${questions[i].slug}; status: ${questions[i].status === "" ? "none" : questions[i].status}; ${questions[i].difficulty.name})`);
 }
+// Check if state.json exists, if so prompt to resume from last question with name
+let state = null
+if (fs.existsSync("state.json")) {
+    state = JSON.parse(fs.readFileSync("state.json", "utf8"));
+    console.log(`Resume ${state.lastQuestion.title} (${state.lastQuestion.slug}; ${state.lastQuestion.difficulty.name})`);
+}
+let qNum = null
+while (!isNaN(+qNum) || (qNum === "resume" && state)) qNum = await rl.question('What Question to Work On? (#/resume): ');
+
+let question = qNum === "resume" ? state?.lastQuestion : questions[+qNum - 1];
+if (!question) {
+    console.log("Invalid question number");
+    process.exit(1);
+}
+// Save the current question to state.json
+fs.writeFileSync("state.json", JSON.stringify({lastQuestion: question}));
+
+// Download the problem
+downloadProblem(question);
+
+// Event Loop
+// while (true) {
+//
+//
+// }
